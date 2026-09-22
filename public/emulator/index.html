@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DAWGAMING Web Emulator</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: #070a0e;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #f1f5f9;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+    }
+    #game-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    #game {
+      width: 100%;
+      height: 100%;
+    }
+    /* File selector overlay when no ROM is provided */
+    #dropzone {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #0e141f 0%, #070a0e 100%);
+      padding: 24px;
+      text-align: center;
+      z-index: 50;
+      cursor: pointer;
+    }
+    .dropzone-card {
+      max-width: 440px;
+      width: 100%;
+      padding: 32px 24px;
+      background: #101722;
+      border: 2px dashed #223249;
+      border-radius: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: all 0.2s ease;
+    }
+    .dropzone-card:hover, .dropzone-card.drag-over {
+      border-color: #10b981;
+      background: #131c2a;
+      box-shadow: 0 0 30px -10px rgba(16, 185, 129, 0.3);
+    }
+    .icon-wrapper {
+      width: 60px;
+      height: 60px;
+      border-radius: 14px;
+      background: #090d14;
+      border: 1px solid #1f2b3e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px;
+    }
+    .dropzone-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+    .dropzone-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+    .btn-select {
+      background: #10b981;
+      color: #042316;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 10px 22px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-family: monospace;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      transition: all 0.2s ease;
+    }
+    .btn-select:hover {
+      background: #34d399;
+      transform: translateY(-1px);
+    }
+    .badge-pill {
+      margin-top: 14px;
+      font-size: 11px;
+      color: #64748b;
+      font-family: monospace;
+    }
+    /* Loading status */
+    #loading-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #070a0e;
+      z-index: 40;
+    }
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid #1e293b;
+      border-top-color: #10b981;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 16px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="loading-state">
+      <div class="spinner"></div>
+      <p id="loading-text" style="font-family: monospace; font-size: 13px; color: #94a3b8;">
+        Iniciando motor WebAssembly...
+      </p>
+    </div>
+
+    <div id="game"></div>
+
+    <div id="dropzone">
+      <div class="dropzone-card" id="dropzone-card">
+        <div class="icon-wrapper">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="6" width="20" height="12" rx="2"/>
+            <path d="M6 12h4"/>
+            <path d="M8 10v4"/>
+            <circle cx="17" cy="10" r="1"/>
+            <circle cx="15" cy="13" r="1"/>
+          </svg>
+        </div>
+        <h2 class="dropzone-title" id="dropzone-title">Cargar ROM de Nintendo DS</h2>
+        <p class="dropzone-desc" id="dropzone-desc">
+          Arrastra y suelta un archivo <code style="color: #34d399; font-family: monospace;">.nds</code> aquí o pulsa para seleccionarlo de tu dispositivo.
+        </p>
+        <button class="btn-select" type="button" onclick="document.getElementById('file-input').click()">
+          Seleccionar Archivo
+        </button>
+        <div class="badge-pill" id="badge-info">Soporte nativo táctil y doble pantalla</div>
+        <input type="file" id="file-input" style="display: none;" onchange="handleFileSelected(event)" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const systemParam = (urlParams.get('core') || 'gba').toLowerCase();
+    const romParam = urlParams.get('rom');
+    const nameParam = urlParams.get('name') || (systemParam === 'nds' ? 'Nintendo DS' : 'Game Boy Advance');
+
+    const loadingState = document.getElementById('loading-state');
+    const loadingText = document.getElementById('loading-text');
+    const dropzone = document.getElementById('dropzone');
+    const dropzoneCard = document.getElementById('dropzone-card');
+    const fileInput = document.getElementById('file-input');
+
+    const isNds = systemParam === 'nds';
+    const layoutParam = urlParams.get('layout') || (isNds ? 'hybrid/top' : '');
+
+    if (isNds) {
+      document.getElementById('dropzone-title').innerText = 'Cargar ROM de Nintendo DS';
+      document.getElementById('dropzone-desc').innerHTML = 'Arrastra y suelta tu archivo <code style="color: #34d399; font-family: monospace;">.nds</code> aquí o haz clic para seleccionarlo de tu equipo.';
+      document.getElementById('badge-info').innerText = 'Doble Pantalla (256x192) + Digitalizador Táctil Stylus';
+    } else {
+      document.getElementById('dropzone-title').innerText = 'Cargar ROM de GBA';
+      document.getElementById('dropzone-desc').innerHTML = 'Arrastra y suelta tu archivo <code style="color: #34d399; font-family: monospace;">.nds</code> o <code style="color: #34d399; font-family: monospace;">.gba</code> aquí o haz clic para seleccionarlo.';
+      document.getElementById('badge-info').innerText = 'mGBA WebAssembly Core (240x160 a 60 FPS)';
+    }
+
+    function initEmulator(romUrl, gameName) {
+      loadingState.style.display = 'flex';
+      loadingText.innerText = `Cargando núcleo ${isNds ? 'DeSmuME (NDS)' : 'mGBA (GBA)'}...`;
+      dropzone.style.display = 'none';
+
+      // If NDS, configure screen layout options in localStorage & EJS_defaultOptions
+      if (isNds && layoutParam) {
+        window.EJS_defaultOptions = {
+          desmume_screens_layout: layoutParam,
+          desmume_hybrid_layout_scale: "3",
+          desmume_hybrid_show_both_screens: "enabled",
+          desmume_hybrid_cursor_always_visible: "enabled"
+        };
+
+        // Update any cached core settings in localStorage so the core picks up the requested layout
+        try {
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.includes('desmume')) {
+              const val = localStorage.getItem(key);
+              if (val) {
+                const parsed = JSON.parse(val);
+                if (parsed && typeof parsed === 'object') {
+                  if (parsed.settings) {
+                    parsed.settings.desmume_screens_layout = layoutParam;
+                    parsed.settings.desmume_hybrid_layout_scale = "3";
+                    parsed.settings.desmume_hybrid_show_both_screens = "enabled";
+                  }
+                  localStorage.setItem(key, JSON.stringify(parsed));
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Could not sync layout setting in localStorage:', e);
+        }
+      }
+
+      // EmulatorJS global variables - 100% Self-Hosted in repo for offline & restricted networks
+      window.EJS_player = '#game';
+      window.EJS_core = isNds ? 'desmume' : 'gba';
+      window.EJS_gameName = gameName || nameParam;
+      window.EJS_gameUrl = romUrl;
+      window.EJS_pathtodata = '/emulator/data/';
+      window.EJS_startOnLoaded = true;
+      window.EJS_color = '#10b981';
+      window.EJS_threads = false; // Runs smoothly anywhere without SharedArrayBuffer / COOP headers
+      window.EJS_noAutoFocus = false;
+      window.EJS_language = 'en-US'; // Use local language bundle without missing string warnings
+
+      // Hide loading overlay when emulator is ready or starts
+      const dismissLoading = () => {
+        if (loadingState) {
+          loadingState.style.opacity = '0';
+          loadingState.style.transition = 'opacity 0.3s ease';
+          setTimeout(() => {
+            loadingState.style.display = 'none';
+          }, 300);
+        }
+      };
+
+      window.EJS_onGameStart = dismissLoading;
+      window.EJS_ready = dismissLoading;
+
+      // MutationObserver fallback to dismiss loading as soon as canvas is rendered in #game
+      const observer = new MutationObserver(() => {
+        const canvas = document.querySelector('#game canvas');
+        if (canvas) {
+          dismissLoading();
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.getElementById('game'), { childList: true, subtree: true });
+
+      // Fallback timeout so it never hangs indefinitely
+      setTimeout(dismissLoading, 6000);
+
+      window.addEventListener('error', (e) => {
+        console.error('Emulator runtime error:', e);
+      });
+
+      const loaderScript = document.createElement('script');
+      loaderScript.src = '/emulator/data/loader.js';
+      loaderScript.onerror = function() {
+        if (loadingText) {
+          loadingText.innerText = 'Error al cargar los archivos locales del emulador.';
+        }
+      };
+      document.body.appendChild(loaderScript);
+    }
+
+    function handleFileSelected(e) {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const blobUrl = URL.createObjectURL(file);
+      const cleanName = file.name.replace(/\.[^/.]+$/, '');
+      initEmulator(blobUrl, cleanName);
+    }
+
+    // Drag and drop setup
+    ['dragenter', 'dragover'].forEach(name => {
+      dropzone.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzoneCard.classList.add('drag-over');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(name => {
+      dropzone.addEventListener(name, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropzoneCard.classList.remove('drag-over');
+      });
+    });
+
+    dropzone.addEventListener('drop', (e) => {
+      const dt = e.dataTransfer;
+      const file = dt && dt.files && dt.files[0];
+      if (file) {
+        const blobUrl = URL.createObjectURL(file);
+        const cleanName = file.name.replace(/\.[^/.]+$/, '');
+        initEmulator(blobUrl, cleanName);
+      }
+    });
+
+    // Check if ROM is provided via parameter
+    if (romParam) {
+      initEmulator(romParam, nameParam);
+    } else {
+      loadingState.style.display = 'none';
+      dropzone.style.display = 'flex';
+    }
+  </script>
+</body>
+</html>

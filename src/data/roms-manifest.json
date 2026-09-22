@@ -1,0 +1,39 @@
+[
+  {
+    "id": "gba-pokemon_esmeralda",
+    "slug": "pokemon_esmeralda",
+    "title": "Pokémon Edición Esmeralda",
+    "platform": "gba",
+    "genre": "rpg",
+    "year": 2005,
+    "developer": "Game Freak / Nintendo",
+    "description": "Aventura RPG definitiva en la región de Hoenn. Embárcate en tu viaje como entrenador, enfréntate a los líderes de gimnasio, detén los planes del Equipo Magma y el Equipo Aqua, y desafía el Frente de Batalla.",
+    "romFile": "/roms/gba/pokemon_esmeralda.gba",
+    "romSource": "local",
+    "romSizeBytes": 16777216,
+    "romSizeFormatted": "16 MB",
+    "coverUrl": "/roms/gba/pokemon_esmeralda.png",
+    "hasCustomCover": true,
+    "featured": true,
+    "controlsHint": "D-Pad: Moverse | A: Confirmar / Interactuar | B: Cancelar / Correr | Start: Menú de juego | Select: Objeto asignado",
+    "createdAt": "1996-12-24T21:32:00.000Z"
+  },
+  {
+    "id": "nds-pokemon_renegade_platinum",
+    "slug": "pokemon_renegade_platinum",
+    "title": "Pokémon Renegade Platinum",
+    "platform": "nds",
+    "genre": "rpg",
+    "year": 2019,
+    "developer": "Drayano / Game Freak",
+    "description": "Aclamada reedición y mejora para Nintendo DS de Pokémon Platino creada por Drayano, con los 493 Pokémon disponibles, dificultad rebalanceada, mejoras de calidad de vida y textos en español.",
+    "romFile": "/roms/nds/pokemon_renegade_platinum.zip",
+    "romSource": "local",
+    "romSizeBytes": 51233128,
+    "romSizeFormatted": "48.9 MB",
+    "coverUrl": "/roms/nds/pokemon_renegade_platinum.png",
+    "hasCustomCover": true,
+    "featured": true,
+    "createdAt": "2026-09-22T11:06:16.623Z"
+  }
+]
