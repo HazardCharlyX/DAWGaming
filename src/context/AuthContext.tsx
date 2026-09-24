@@ -93,30 +93,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(msg);
     }
 
-    let emailToTry = clean;
-
-    // Si el usuario no ha puesto una arroba, buscar su email asociado o usar el dominio @dawgaming.app
-    if (!clean.includes('@')) {
-      try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('username', '==', clean));
-        const snap = await getDocs(q);
-        if (!snap.empty && snap.docs[0].data()?.email) {
-          emailToTry = snap.docs[0].data().email;
-        } else {
-          emailToTry = `${clean}@dawgaming.app`;
-        }
-      } catch {
-        emailToTry = `${clean}@dawgaming.app`;
-      }
-    }
+    let emailToTry = clean.includes('@') ? clean : `${clean}@dawgaming.app`;
 
     try {
       const res = await signInWithEmailAndPassword(auth, emailToTry, pass);
       if (res.user) {
-        await syncUserProfile(res.user);
+        syncUserProfile(res.user).catch(() => {});
       }
     } catch (err: any) {
+      // Si falló por usuario no encontrado y no llevaba arroba, intentar buscar en Firestore por si tenía otro email
+      if ((err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') && !clean.includes('@')) {
+        try {
+          const usersRef = collection(db, 'users');
+          const q = query(usersRef, where('username', '==', clean));
+          const snap = await getDocs(q);
+          if (!snap.empty && snap.docs[0].data()?.email && snap.docs[0].data().email !== emailToTry) {
+            const alternativeEmail = snap.docs[0].data().email;
+            const res2 = await signInWithEmailAndPassword(auth, alternativeEmail, pass);
+            if (res2.user) {
+              syncUserProfile(res2.user).catch(() => {});
+              return;
+            }
+          }
+        } catch {
+          // Ignorar fallo de búsqueda en Firestore
+        }
+      }
+
       console.error('Login Error:', err);
       let msg = 'Usuario o contraseña incorrectos';
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
