@@ -10,14 +10,23 @@ import {
   updateProfile,
   signOut,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  doc,
+  setDoc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  serverTimestamp,
+} from 'firebase/firestore';
 import { auth, db, googleProvider } from '@/lib/firebase';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
-  signInWithGoogle: () => Promise<void>;
+  signInWithUsername: (username: string, pass: string) => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, displayName?: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -36,12 +45,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userRef = doc(db, 'users', firebaseUser.uid);
       const snap = await getDoc(userRef);
+      const username = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Gamer';
+
       if (!snap.exists()) {
         await setDoc(userRef, {
           uid: firebaseUser.uid,
           email: firebaseUser.email,
-          displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Gamer',
-          photoURL: firebaseUser.photoURL || null,
+          username: username.toLowerCase(),
+          displayName: username,
           createdAt: serverTimestamp(),
           lastLoginAt: serverTimestamp(),
         });
@@ -50,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           userRef,
           {
             lastLoginAt: serverTimestamp(),
+            username: username.toLowerCase(),
           },
           { merge: true }
         );
@@ -71,43 +83,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithUsername = async (usernameInput: string, pass: string) => {
     setError(null);
-    try {
-      const res = await signInWithPopup(auth, googleProvider);
-      if (res.user) {
-        await syncUserProfile(res.user);
-      }
-    } catch (err: any) {
-      console.error('Google Sign In Error:', err);
-      if (err.code === 'auth/popup-closed-by-user') {
-        return;
-      }
-      setError(err.message || 'Error al iniciar sesión con Google');
-      throw err;
-    }
-  };
+    const clean = usernameInput.trim().toLowerCase();
 
-  const signInWithEmail = async (email: string, pass: string) => {
-    setError(null);
+    if (!clean || !pass) {
+      const msg = 'Introduce tu usuario y contraseña';
+      setError(msg);
+      throw new Error(msg);
+    }
+
+    let emailToTry = clean;
+
+    // Si el usuario no ha puesto una arroba, buscar su email asociado o usar el dominio @dawgaming.app
+    if (!clean.includes('@')) {
+      try {
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('username', '==', clean));
+        const snap = await getDocs(q);
+        if (!snap.empty && snap.docs[0].data()?.email) {
+          emailToTry = snap.docs[0].data().email;
+        } else {
+          emailToTry = `${clean}@dawgaming.app`;
+        }
+      } catch {
+        emailToTry = `${clean}@dawgaming.app`;
+      }
+    }
+
     try {
-      const res = await signInWithEmailAndPassword(auth, email, pass);
+      const res = await signInWithEmailAndPassword(auth, emailToTry, pass);
       if (res.user) {
         await syncUserProfile(res.user);
       }
     } catch (err: any) {
-      console.error('Email Sign In Error:', err);
-      let msg = 'Error al iniciar sesión';
+      console.error('Login Error:', err);
+      let msg = 'Usuario o contraseña incorrectos';
       if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-        msg = 'Correo electrónico o contraseña incorrectos';
+        msg = 'Usuario o contraseña incorrectos';
       } else if (err.code === 'auth/user-not-found') {
-        msg = 'No existe una cuenta con este correo';
+        msg = 'El usuario no existe. Contacta con Carlos J Samper para registrarte.';
       } else if (err.code === 'auth/too-many-requests') {
-        msg = 'Demasiados intentos fallidos. Inténtalo más tarde.';
+        msg = 'Demasiados intentos fallidos. Espera unos momentos.';
       }
       setError(msg);
       throw new Error(msg);
     }
+  };
+
+  const signInWithEmail = async (email: string, pass: string) => {
+    return signInWithUsername(email, pass);
   };
 
   const signUpWithEmail = async (email: string, pass: string, displayName?: string) => {
@@ -124,11 +149,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Email Sign Up Error:', err);
       let msg = 'Error al registrar la cuenta';
       if (err.code === 'auth/email-already-in-use') {
-        msg = 'Ya existe una cuenta registrada con este correo electrónico';
+        msg = 'Ya existe una cuenta con este nombre o correo';
       } else if (err.code === 'auth/weak-password') {
         msg = 'La contraseña debe tener al menos 6 caracteres';
-      } else if (err.code === 'auth/invalid-email') {
-        msg = 'El formato del correo electrónico no es válido';
       }
       setError(msg);
       throw new Error(msg);
@@ -153,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         error,
-        signInWithGoogle,
+        signInWithUsername,
         signInWithEmail,
         signUpWithEmail,
         logout,

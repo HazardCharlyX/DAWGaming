@@ -405,18 +405,24 @@
         }
       };
 
-      window.EJS_onGameStart = () => {
+      const notifyReady = () => {
         dismissLoading();
         startAutoSave();
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'DAWGAMING_EMULATOR_READY' }, '*');
+          }
+        } catch (e) {}
       };
+
+      window.EJS_onGameStart = notifyReady;
       window.EJS_ready = dismissLoading;
 
       // MutationObserver fallback to dismiss loading as soon as canvas is rendered in #game
       const observer = new MutationObserver(() => {
         const canvas = document.querySelector('#game canvas');
         if (canvas) {
-          dismissLoading();
-          startAutoSave();
+          notifyReady();
           observer.disconnect();
         }
       });

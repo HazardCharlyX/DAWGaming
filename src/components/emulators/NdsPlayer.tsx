@@ -116,10 +116,26 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
     }
   }, []);
 
-  // Fetch initial cloud save if user is logged in
+  // Inyectar partida en la nube en el iframe
+  const injectCloudSaveIntoIframe = (bytes: Uint8Array, fileName?: string) => {
+    if (iframeRef.current?.contentWindow) {
+      console.log('[DAWGAMING] Enviando partida de la nube al emulador...');
+      iframeRef.current.contentWindow.postMessage(
+        {
+          type: 'DAWGAMING_INJECT_CLOUD_SAVE',
+          saveData: bytes,
+          fileName: fileName || `${gameId}.srm`,
+        },
+        '*'
+      );
+    }
+  };
+
+  // Buscar partida en la nube al cargar el juego si el usuario está conectado
   useEffect(() => {
     if (!user || !gameId) {
       setCloudMetadata(null);
+      cloudSaveBytesRef.current = null;
       return;
     }
 
@@ -128,22 +144,14 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
       if (!isMounted) return;
       if (meta) {
         setCloudMetadata(meta);
-        const bytes = await downloadCloudSave(user.uid, meta.fileName);
+        const bytes = await downloadCloudSave(user.uid, gameId, meta.fileName);
         if (bytes && isMounted) {
           cloudSaveBytesRef.current = bytes;
-          // Inyectar en el iframe si ya está cargado
+          injectCloudSaveIntoIframe(bytes, meta.fileName);
+          // Reintento de respaldo por si el núcleo tardó en montar el FS
           setTimeout(() => {
-            if (iframeRef.current?.contentWindow) {
-              iframeRef.current.contentWindow.postMessage(
-                {
-                  type: 'DAWGAMING_INJECT_CLOUD_SAVE',
-                  saveData: bytes,
-                  fileName: meta.fileName,
-                },
-                '*'
-              );
-            }
-          }, 2000);
+            if (isMounted) injectCloudSaveIntoIframe(bytes, meta.fileName);
+          }, 2500);
         }
       }
     });
@@ -152,6 +160,54 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
       isMounted = false;
     };
   }, [user, gameId]);
+
+  // Forzar guardado y subida a la base de datos Firestore
+  const forceSaveAndUploadToCloud = async (customMessage?: string) => {
+    if (!user || !gameId) return null;
+
+    try {
+      setCloudSyncing(true);
+      if (customMessage) setCloudMessage(customMessage);
+
+      // 1. Acceso directo por mismo origen para salvar al instante sin retardos
+      const win = iframeRef.current?.contentWindow as any;
+      const emu = win?.EJS_emulator;
+      const gm = emu?.gameManager;
+
+      if (gm && typeof gm.saveSaveFiles === 'function') {
+        gm.saveSaveFiles();
+        if (gm.FS && typeof gm.FS.syncfs === 'function') {
+          gm.FS.syncfs(false, () => {});
+        }
+        const saveBytes = gm.getSaveFile(!1);
+        if (saveBytes && saveBytes.length > 0) {
+          const savePath = gm.getSaveFilePath() || '';
+          const fileName = savePath.split('/').pop() || `${gameId}.srm`;
+          const meta = await uploadCloudSave(
+            user.uid,
+            gameId,
+            'nds',
+            activeTitle,
+            fileName,
+            new Uint8Array(saveBytes)
+          );
+          setCloudMetadata(meta);
+          setCloudMessage('¡Partida guardada en tu cuenta de Firebase!');
+          setTimeout(() => setCloudMessage(null), 4000);
+          return meta;
+        }
+      }
+
+      // 2. Si el acceso directo no devolvió datos, solicitar vía postMessage
+      iframeRef.current?.contentWindow?.postMessage({ type: 'DAWGAMING_GET_SAVE' }, '*');
+    } catch (e) {
+      console.warn('[DAWGAMING Cloud] Extracción directa falló, solicitando vía mensaje:', e);
+      iframeRef.current?.contentWindow?.postMessage({ type: 'DAWGAMING_GET_SAVE' }, '*');
+    } finally {
+      setTimeout(() => setCloudSyncing(false), 600);
+    }
+    return null;
+  };
 
   useEffect(() => {
     if (game?.id && game?.title) {
@@ -163,21 +219,45 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
     }
 
     return () => {
-      // Forzar guardado inmediato en IndexedDB antes de desmontar el componente al navegar
-      if (iframeRef.current?.contentWindow) {
-        try {
+      // Al salir de la página: Forzar guardado en IndexedDB y subida a Firebase
+      try {
+        const win = iframeRef.current?.contentWindow as any;
+        const gm = win?.EJS_emulator?.gameManager;
+        if (gm && typeof gm.saveSaveFiles === 'function') {
+          gm.saveSaveFiles();
+          if (gm.FS) gm.FS.syncfs(false, () => {});
+          const saveBytes = gm.getSaveFile(!1);
+          if (saveBytes && user && gameId) {
+            const fileName = (gm.getSaveFilePath() || '').split('/').pop() || `${gameId}.srm`;
+            uploadCloudSave(
+              user.uid,
+              gameId,
+              'nds',
+              activeTitle,
+              fileName,
+              new Uint8Array(saveBytes)
+            ).catch(() => {});
+          }
+        } else if (iframeRef.current?.contentWindow) {
           iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_SAVE_NOW' }, '*');
-        } catch {}
-      }
+        }
+      } catch {}
     };
-  }, [game]);
+  }, [game, user, gameId, activeTitle]);
 
-  // Listener para mensajes del emulador (save data de vuelta)
+  // Listener para mensajes del emulador
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
       if (!event.data) return;
 
-      // 1. Recibir datos solicitados para subida a Firebase
+      // 1. El emulador arrancó y está listo: si tenemos partida de la nube descargada, inyectar
+      if (event.data.type === 'DAWGAMING_EMULATOR_READY') {
+        if (cloudSaveBytesRef.current) {
+          injectCloudSaveIntoIframe(cloudSaveBytesRef.current, cloudMetadata?.fileName);
+        }
+      }
+
+      // 2. Respuesta a petición explícita de guardado
       if (event.data.type === 'DAWGAMING_SAVE_DATA') {
         const { saveData, fileName } = event.data;
         if (saveData && user) {
@@ -188,11 +268,11 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
               gameId,
               'nds',
               activeTitle,
-              fileName,
+              fileName || `${gameId}.srm`,
               new Uint8Array(saveData)
             );
             setCloudMetadata(meta);
-            setCloudMessage('¡Partida sincronizada en la nube!');
+            setCloudMessage('¡Partida guardada en tu cuenta de Firebase!');
             setTimeout(() => setCloudMessage(null), 4000);
           } catch (err) {
             console.error('Error subiendo partida a Firebase:', err);
@@ -204,33 +284,42 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
         }
       }
 
-      // 2. Auto-guardado periódico de 10s: sincronizar en background cada 30 segundos si hay sesión
+      // 3. Auto-guardado periódico o por visibilidad (segundo plano/móvil)
       if (event.data.type === 'DAWGAMING_SAVE_UPDATED' && user && event.data.saveData) {
+        const source = event.data.source;
         const now = Date.now();
-        if (now - lastAutoSyncTime.current > 30000) {
+        const isUrgent =
+          source === 'visibilitychange_hidden' ||
+          source === 'pagehide' ||
+          source === 'beforeunload' ||
+          source === 'parent_message';
+
+        // Guardar de inmediato si es un evento de salida o cada 15 segundos en juego continuo
+        if (isUrgent || now - lastAutoSyncTime.current > 15000) {
           lastAutoSyncTime.current = now;
           uploadCloudSave(
             user.uid,
             gameId,
             'nds',
             activeTitle,
-            event.data.fileName || 'game.srm',
+            event.data.fileName || `${gameId}.srm`,
             new Uint8Array(event.data.saveData)
           )
             .then((meta) => setCloudMetadata(meta))
-            .catch(() => {});
+            .catch((err) => console.warn('[CloudSync Auto] Error:', err));
         }
       }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [user, gameId, activeTitle]);
+  }, [user, gameId, activeTitle, cloudMetadata?.fileName]);
 
-  const handleSelectLayout = (newLayout: NdsScreenLayout) => {
+  const handleSelectLayout = async (newLayout: NdsScreenLayout) => {
     if (newLayout === layout) return;
-    // Guardar partida antes de recargar el iframe con el nuevo layout
-    if (iframeRef.current?.contentWindow) {
+    if (user) {
+      await forceSaveAndUploadToCloud('Guardando progreso antes de cambiar pantalla...');
+    } else if (iframeRef.current?.contentWindow) {
       try {
         iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_SAVE_NOW' }, '*');
       } catch {}
@@ -241,19 +330,19 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
     }
   };
 
-  const handleRestart = () => {
-    if (iframeRef.current) {
-      if (iframeRef.current.contentWindow) {
-        try {
-          iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_SAVE_NOW' }, '*');
-        } catch {}
-      }
-      setTimeout(() => {
-        if (iframeRef.current) {
-          iframeRef.current.src = iframeRef.current.src;
-        }
-      }, 150);
+  const handleRestart = async () => {
+    if (user) {
+      await forceSaveAndUploadToCloud('Guardando en la nube antes de reiniciar...');
+    } else if (iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_SAVE_NOW' }, '*');
+      } catch {}
     }
+    setTimeout(() => {
+      if (iframeRef.current) {
+        iframeRef.current.src = iframeRef.current.src;
+      }
+    }, 150);
   };
 
   const handleFullscreen = () => {
@@ -277,18 +366,33 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
       setAuthModalOpen(true);
       return;
     }
-
-    if (iframeRef.current?.contentWindow) {
-      setCloudSyncing(true);
-      setCloudMessage('Extrayendo partida...');
-      iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_GET_SAVE' }, '*');
-    }
+    forceSaveAndUploadToCloud('Guardando en Firebase...');
   };
 
   // Descargar partida local (.sav)
   const handleDownloadSav = () => {
-    if (!iframeRef.current?.contentWindow) return;
+    try {
+      const win = iframeRef.current?.contentWindow as any;
+      const gm = win?.EJS_emulator?.gameManager;
+      if (gm && typeof gm.saveSaveFiles === 'function') {
+        gm.saveSaveFiles();
+        const saveBytes = gm.getSaveFile(!1);
+        if (saveBytes) {
+          const blob = new Blob([new Uint8Array(saveBytes)], { type: 'application/octet-stream' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${activeTitle.replace(/[^a-zA-Z0-9_-]/g, '_')}.sav`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          return;
+        }
+      }
+    } catch {}
 
+    // Fallback con postMessage
     const onData = (event: MessageEvent) => {
       if (event.data?.type === 'DAWGAMING_SAVE_DATA' && event.data.saveData) {
         window.removeEventListener('message', onData);
@@ -307,7 +411,7 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
     };
 
     window.addEventListener('message', onData);
-    iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_GET_SAVE' }, '*');
+    iframeRef.current?.contentWindow?.postMessage({ type: 'DAWGAMING_GET_SAVE' }, '*');
   };
 
   const currentOption =
