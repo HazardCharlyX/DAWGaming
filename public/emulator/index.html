@@ -282,6 +282,24 @@
               console.warn(`[DAWGAMING AutoSave] Error al sincronizar IndexedDB (${source}):`, err);
             } else {
               console.log(`[DAWGAMING AutoSave] Partida guardada con éxito en IndexedDB (${source})`);
+              // Notificar a la ventana padre (Next.js) con el buffer de guardado para Firebase Cloud
+              try {
+                if (window.parent && window.parent !== window) {
+                  const saveBytes = gm.getSaveFile(!1);
+                  if (saveBytes && saveBytes.length > 0) {
+                    const savePath = gm.getSaveFilePath() || '';
+                    const fileName = savePath.split('/').pop() || 'game.srm';
+                    window.parent.postMessage({
+                      type: 'DAWGAMING_SAVE_UPDATED',
+                      saveData: saveBytes,
+                      fileName: fileName,
+                      source: source
+                    }, '*');
+                  }
+                }
+              } catch (e) {
+                // cross-origin or buffer error
+              }
             }
           });
         } catch (e) {
@@ -320,12 +338,58 @@
         forceSaveNow('beforeunload');
       });
 
-      // Escuchar peticiones de guardado desde la ventana padre (Next.js)
+      // Escuchar peticiones desde la ventana padre (Next.js / Firebase)
       window.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'DAWGAMING_SAVE_NOW') {
+        if (!event.data) return;
+
+        // 1. Guardar ahora
+        if (event.data.type === 'DAWGAMING_SAVE_NOW') {
           forceSaveNow('parent_message');
           if (event.source) {
             event.source.postMessage({ type: 'DAWGAMING_SAVE_DONE' }, '*');
+          }
+        }
+
+        // 2. Extraer archivo de guardado para la nube
+        if (event.data.type === 'DAWGAMING_GET_SAVE') {
+          try {
+            const gm = window.EJS_emulator?.gameManager;
+            if (gm && typeof gm.saveSaveFiles === 'function') {
+              gm.saveSaveFiles();
+              const saveBytes = gm.getSaveFile(!1);
+              const savePath = gm.getSaveFilePath() || '';
+              const fileName = savePath.split('/').pop() || 'game.srm';
+              if (event.source && saveBytes) {
+                event.source.postMessage({
+                  type: 'DAWGAMING_SAVE_DATA',
+                  saveData: saveBytes,
+                  fileName: fileName,
+                }, '*');
+              }
+            }
+          } catch (e) {
+            console.error('[DAWGAMING Cloud] Error al extraer partida:', e);
+          }
+        }
+
+        // 3. Inyectar partida descargada de Firebase en el emulador
+        if (event.data.type === 'DAWGAMING_INJECT_CLOUD_SAVE') {
+          try {
+            const gm = window.EJS_emulator?.gameManager;
+            if (gm && gm.FS && event.data.saveData) {
+              const savePath = gm.getSaveFilePath() || `/data/saves/${event.data.fileName || 'game.srm'}`;
+              const bytes = new Uint8Array(event.data.saveData);
+              gm.FS.writeFile(savePath, bytes);
+              gm.FS.syncfs(false, () => {
+                gm.loadSaveFiles();
+                console.log('[DAWGAMING Cloud] Partida de la nube inyectada con éxito:', savePath);
+                if (event.source) {
+                  event.source.postMessage({ type: 'DAWGAMING_CLOUD_SAVE_INJECTED' }, '*');
+                }
+              });
+            }
+          } catch (e) {
+            console.error('[DAWGAMING Cloud] Error al inyectar partida de la nube:', e);
           }
         }
       });

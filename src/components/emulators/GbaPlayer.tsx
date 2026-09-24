@@ -3,12 +3,23 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Game } from '@/lib/types';
 import { recordGamePlayed } from '@/lib/storage';
+import { useAuth } from '@/context/AuthContext';
+import { AuthModal } from '@/components/auth/AuthModal';
+import {
+  uploadCloudSave,
+  downloadCloudSave,
+  getCloudSaveMetadata,
+  CloudSaveMetadata,
+} from '@/lib/cloud-saves';
 import {
   RotateCcw,
   Maximize2,
   Tv,
-  Gamepad2,
-  Sparkles,
+  Cloud,
+  CloudUpload,
+  Download,
+  Loader2,
+  CheckCircle2,
 } from 'lucide-react';
 
 interface GbaPlayerProps {
@@ -18,8 +29,57 @@ interface GbaPlayerProps {
 export function GbaPlayer({ game }: GbaPlayerProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
+
   const [crtFilter, setCrtFilter] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Cloud Save States
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [cloudSyncing, setCloudSyncing] = useState(false);
+  const [cloudMetadata, setCloudMetadata] = useState<CloudSaveMetadata | null>(null);
+  const [cloudMessage, setCloudMessage] = useState<string | null>(null);
+  const cloudSaveBytesRef = useRef<Uint8Array | null>(null);
+  const lastAutoSyncTime = useRef<number>(0);
+
+  const gameId = game.id;
+  const activeTitle = game.title;
+
+  // Check cloud save on mount if logged in
+  useEffect(() => {
+    if (!user || !gameId) {
+      setCloudMetadata(null);
+      return;
+    }
+
+    let isMounted = true;
+    getCloudSaveMetadata(user.uid, gameId).then(async (meta) => {
+      if (!isMounted) return;
+      if (meta) {
+        setCloudMetadata(meta);
+        const bytes = await downloadCloudSave(user.uid, meta.fileName);
+        if (bytes && isMounted) {
+          cloudSaveBytesRef.current = bytes;
+          setTimeout(() => {
+            if (iframeRef.current?.contentWindow) {
+              iframeRef.current.contentWindow.postMessage(
+                {
+                  type: 'DAWGAMING_INJECT_CLOUD_SAVE',
+                  saveData: bytes,
+                  fileName: meta.fileName,
+                },
+                '*'
+              );
+            }
+          }, 2000);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user, gameId]);
 
   useEffect(() => {
     recordGamePlayed({
@@ -36,6 +96,61 @@ export function GbaPlayer({ game }: GbaPlayerProps) {
       }
     };
   }, [game.id, game.platform, game.title]);
+
+  // Listener para mensajes del emulador (save data de vuelta)
+  useEffect(() => {
+    const handleMessage = async (event: MessageEvent) => {
+      if (!event.data) return;
+
+      // 1. Recibir datos solicitados para subida a Firebase
+      if (event.data.type === 'DAWGAMING_SAVE_DATA') {
+        const { saveData, fileName } = event.data;
+        if (saveData && user) {
+          try {
+            setCloudSyncing(true);
+            const meta = await uploadCloudSave(
+              user.uid,
+              gameId,
+              'gba',
+              activeTitle,
+              fileName,
+              new Uint8Array(saveData)
+            );
+            setCloudMetadata(meta);
+            setCloudMessage('¡Partida sincronizada en la nube!');
+            setTimeout(() => setCloudMessage(null), 4000);
+          } catch (err) {
+            console.error('Error subiendo partida a Firebase:', err);
+            setCloudMessage('Error al sincronizar en la nube');
+            setTimeout(() => setCloudMessage(null), 4000);
+          } finally {
+            setCloudSyncing(false);
+          }
+        }
+      }
+
+      // 2. Auto-guardado periódico de 10s: sincronizar en background cada 30 segundos si hay sesión
+      if (event.data.type === 'DAWGAMING_SAVE_UPDATED' && user && event.data.saveData) {
+        const now = Date.now();
+        if (now - lastAutoSyncTime.current > 30000) {
+          lastAutoSyncTime.current = now;
+          uploadCloudSave(
+            user.uid,
+            gameId,
+            'gba',
+            activeTitle,
+            event.data.fileName || 'game.srm',
+            new Uint8Array(event.data.saveData)
+          )
+            .then((meta) => setCloudMetadata(meta))
+            .catch(() => {});
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [user, gameId, activeTitle]);
 
   const handleRestart = () => {
     if (iframeRef.current) {
@@ -68,6 +183,45 @@ export function GbaPlayer({ game }: GbaPlayerProps) {
     }
   };
 
+  // Botón manual "Guardar en Nube"
+  const handleCloudSaveClick = () => {
+    if (!user) {
+      setAuthModalOpen(true);
+      return;
+    }
+
+    if (iframeRef.current?.contentWindow) {
+      setCloudSyncing(true);
+      setCloudMessage('Extrayendo partida...');
+      iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_GET_SAVE' }, '*');
+    }
+  };
+
+  // Descargar partida local (.sav)
+  const handleDownloadSav = () => {
+    if (!iframeRef.current?.contentWindow) return;
+
+    const onData = (event: MessageEvent) => {
+      if (event.data?.type === 'DAWGAMING_SAVE_DATA' && event.data.saveData) {
+        window.removeEventListener('message', onData);
+        const blob = new Blob([new Uint8Array(event.data.saveData)], {
+          type: 'application/octet-stream',
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${activeTitle.replace(/[^a-zA-Z0-9_-]/g, '_')}.sav`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
+    };
+
+    window.addEventListener('message', onData);
+    iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_GET_SAVE' }, '*');
+  };
+
   const emulatorSrc = `/emulator/index.html?core=gba&rom=${encodeURIComponent(
     game.romUrl || ''
   )}&name=${encodeURIComponent(game.title)}`;
@@ -92,7 +246,25 @@ export function GbaPlayer({ game }: GbaPlayerProps) {
           </div>
 
           <div className="flex items-center gap-3 text-slate-400 font-mono text-[11px]">
-            <span className="hidden md:inline text-[#64748b] truncate max-w-[200px]">
+            {user ? (
+              <span className="text-emerald-400 font-medium flex items-center gap-1.5 bg-emerald-950/40 border border-emerald-800/40 px-2 py-0.5 rounded">
+                <Cloud className="w-3 h-3 animate-pulse" />
+                <span className="hidden sm:inline">
+                  {cloudMetadata ? 'Nube Sincronizada' : 'Conectado a Firebase'}
+                </span>
+              </span>
+            ) : (
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="text-slate-400 hover:text-emerald-400 flex items-center gap-1 cursor-pointer transition-colors"
+                title="Inicia sesión para guardar en la nube"
+              >
+                <Cloud className="w-3 h-3 text-slate-500" />
+                <span className="hidden sm:inline">Nube desconectada</span>
+              </button>
+            )}
+
+            <span className="hidden md:inline text-[#64748b] truncate max-w-[150px]">
               {game.title}
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#2a384d]" />
@@ -114,6 +286,14 @@ export function GbaPlayer({ game }: GbaPlayerProps) {
             allow="autoplay; fullscreen; gamepad; microphone"
             onLoad={() => setIsLoaded(true)}
           />
+
+          {/* Toast Notification */}
+          {cloudMessage && (
+            <div className="absolute top-4 bg-[#0e1622]/95 border border-emerald-500/70 text-emerald-300 px-3.5 py-1.5 rounded-lg shadow-xl font-mono text-xs flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200 z-30">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <span>{cloudMessage}</span>
+            </div>
+          )}
         </div>
 
         {/* Bottom Tactile Hardware Toolbar */}
@@ -139,10 +319,34 @@ export function GbaPlayer({ game }: GbaPlayerProps) {
               <Tv className="w-3.5 h-3.5" />
               <span className="font-mono text-[10px] uppercase">CRT</span>
             </button>
+
+            <button
+              onClick={handleDownloadSav}
+              title="Descargar copia de tu partida (.sav) al ordenador"
+              className="btn-hardware px-2.5 py-1.5 text-xs text-[#94a3b8] hover:text-white hover:border-emerald-500 flex items-center gap-1 cursor-pointer hidden sm:flex"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="font-mono text-[11px]">Bajar .sav</span>
+            </button>
           </div>
 
           {/* Right Actions */}
           <div className="flex items-center gap-2">
+            {/* Botón Guardar en Nube Firebase */}
+            <button
+              onClick={handleCloudSaveClick}
+              disabled={cloudSyncing}
+              title={user ? 'Sincronizar progreso en tu cuenta de Firebase' : 'Iniciar sesión para guardar en la nube'}
+              className="btn-hardware px-3 py-1.5 text-xs text-emerald-300 bg-emerald-950/70 border-emerald-500/60 hover:bg-emerald-900/80 hover:border-emerald-400 flex items-center gap-1.5 cursor-pointer font-mono font-bold transition-all shadow-sm shadow-emerald-950/50 disabled:opacity-50"
+            >
+              {cloudSyncing ? (
+                <Loader2 className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+              ) : (
+                <CloudUpload className="w-3.5 h-3.5 text-emerald-400" />
+              )}
+              <span>{cloudSyncing ? 'Guardando...' : 'Guardar en Nube'}</span>
+            </button>
+
             <button
               onClick={handleFullscreen}
               title="Pantalla Completa"
@@ -154,6 +358,9 @@ export function GbaPlayer({ game }: GbaPlayerProps) {
           </div>
         </div>
       </div>
+
+      {/* Auth Modal for Login */}
+      <AuthModal isOpen={authModalOpen} onClose={() => setAuthModalOpen(false)} />
     </div>
   );
 }

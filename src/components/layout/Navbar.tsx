@@ -6,6 +6,8 @@ import { usePathname } from 'next/navigation';
 import { getFavorites } from '@/lib/storage';
 import { Menu, X, Heart } from 'lucide-react';
 
+import { UserMenu } from '@/components/auth/UserMenu';
+
 export function Navbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -89,16 +91,24 @@ export function Navbar() {
               </span>
             )}
           </Link>
+
+          <div className="h-4 w-px bg-[#223348] mx-1" />
+
+          {/* User & Cloud Save Profile Menu */}
+          <UserMenu />
         </nav>
 
-        {/* Mobile menu button */}
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="md:hidden p-2 rounded-md text-[#94a3b8] hover:text-white hover:bg-[#18212e] border border-[#253244]"
-          aria-label="Abrir menú"
-        >
-          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        {/* Mobile menu and User actions */}
+        <div className="flex md:hidden items-center gap-2">
+          <UserMenu />
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="p-2 rounded-md text-[#94a3b8] hover:text-white hover:bg-[#18212e] border border-[#253244]"
+            aria-label="Abrir menú"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {/* Mobile Drawer */}
