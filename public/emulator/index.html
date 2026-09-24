@@ -203,14 +203,19 @@
       loadingText.innerText = `Cargando núcleo ${isNds ? 'DeSmuME (NDS)' : 'mGBA (GBA)'}...`;
       dropzone.style.display = 'none';
 
+      if (!window.EJS_defaultOptions) {
+        window.EJS_defaultOptions = {};
+      }
+      window.EJS_defaultOptions['save-save-interval'] = '30';
+
       // If NDS, configure screen layout options in localStorage & EJS_defaultOptions
       if (isNds && layoutParam) {
-        window.EJS_defaultOptions = {
+        Object.assign(window.EJS_defaultOptions, {
           desmume_screens_layout: layoutParam,
           desmume_hybrid_layout_scale: "3",
           desmume_hybrid_show_both_screens: "enabled",
           desmume_hybrid_cursor_always_visible: "enabled"
-        };
+        });
 
         // Update any cached core settings in localStorage so the core picks up the requested layout
         try {
@@ -248,6 +253,83 @@
       window.EJS_noAutoFocus = false;
       window.EJS_language = 'en-US'; // Use local language bundle without missing string warnings
 
+      // Auto-save logic: flush SRAM from memory to virtual FS and persist to IndexedDB
+      let isSaving = false;
+      let autoSaveIntervalId = null;
+
+      function forceSaveNow(source = 'manual') {
+        try {
+          const emu = window.EJS_emulator;
+          if (!emu || !emu.gameManager || !emu.started) {
+            return;
+          }
+
+          const gm = emu.gameManager;
+          if (typeof gm.saveSaveFiles !== 'function' || !gm.FS || typeof gm.FS.syncfs !== 'function') {
+            return;
+          }
+
+          if (isSaving) return;
+          isSaving = true;
+
+          // 1. Flush in-game SRAM from core RAM to Emscripten virtual file system (/data/saves/)
+          gm.saveSaveFiles();
+
+          // 2. Synchronize Emscripten virtual FS (/data/saves/) with browser IndexedDB
+          gm.FS.syncfs(false, function(err) {
+            isSaving = false;
+            if (err) {
+              console.warn(`[DAWGAMING AutoSave] Error al sincronizar IndexedDB (${source}):`, err);
+            } else {
+              console.log(`[DAWGAMING AutoSave] Partida guardada con éxito en IndexedDB (${source})`);
+            }
+          });
+        } catch (e) {
+          isSaving = false;
+          console.warn(`[DAWGAMING AutoSave] Excepción durante el guardado (${source}):`, e);
+        }
+      }
+
+      window.forceSaveNow = forceSaveNow;
+
+      function startAutoSave() {
+        if (autoSaveIntervalId) clearInterval(autoSaveIntervalId);
+        // Intervalo de auto-guardado activo cada 10 segundos
+        autoSaveIntervalId = setInterval(() => {
+          forceSaveNow('interval_10s');
+        }, 10000);
+        console.log('[DAWGAMING AutoSave] Auto-guardado cada 10 segundos activado.');
+      }
+
+      // Escuchar cuando el usuario minimiza, cambia de pestaña o apaga la pantalla en el móvil
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden') {
+          console.log('[DAWGAMING AutoSave] Pestaña oculta/minimizada, forzando guardado...');
+          forceSaveNow('visibilitychange_hidden');
+        }
+      });
+
+      // Escuchar pagehide (crucial para móviles iOS/Android y navegación)
+      window.addEventListener('pagehide', function() {
+        console.log('[DAWGAMING AutoSave] pagehide detectado, forzando guardado...');
+        forceSaveNow('pagehide');
+      });
+
+      // Escuchar beforeunload para intentos de cierre de ventana
+      window.addEventListener('beforeunload', function() {
+        forceSaveNow('beforeunload');
+      });
+
+      // Escuchar peticiones de guardado desde la ventana padre (Next.js)
+      window.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'DAWGAMING_SAVE_NOW') {
+          forceSaveNow('parent_message');
+          if (event.source) {
+            event.source.postMessage({ type: 'DAWGAMING_SAVE_DONE' }, '*');
+          }
+        }
+      });
+
       // Hide loading overlay when emulator is ready or starts
       const dismissLoading = () => {
         if (loadingState) {
@@ -259,7 +341,10 @@
         }
       };
 
-      window.EJS_onGameStart = dismissLoading;
+      window.EJS_onGameStart = () => {
+        dismissLoading();
+        startAutoSave();
+      };
       window.EJS_ready = dismissLoading;
 
       // MutationObserver fallback to dismiss loading as soon as canvas is rendered in #game
@@ -267,6 +352,7 @@
         const canvas = document.querySelector('#game canvas');
         if (canvas) {
           dismissLoading();
+          startAutoSave();
           observer.disconnect();
         }
       });

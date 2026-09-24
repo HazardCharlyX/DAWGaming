@@ -104,9 +104,25 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
         title: game.title,
       });
     }
+
+    return () => {
+      // Forzar guardado inmediato en IndexedDB antes de desmontar el componente al navegar
+      if (iframeRef.current?.contentWindow) {
+        try {
+          iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_SAVE_NOW' }, '*');
+        } catch {}
+      }
+    };
   }, [game]);
 
   const handleSelectLayout = (newLayout: NdsScreenLayout) => {
+    if (newLayout === layout) return;
+    // Guardar partida antes de recargar el iframe con el nuevo layout
+    if (iframeRef.current?.contentWindow) {
+      try {
+        iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_SAVE_NOW' }, '*');
+      } catch {}
+    }
     setLayout(newLayout);
     if (typeof window !== 'undefined') {
       localStorage.setItem('dawgaming_nds_layout', newLayout);
@@ -115,7 +131,16 @@ export function NdsPlayer({ game, romUrl, title }: NdsPlayerProps) {
 
   const handleRestart = () => {
     if (iframeRef.current) {
-      iframeRef.current.src = iframeRef.current.src;
+      if (iframeRef.current.contentWindow) {
+        try {
+          iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_SAVE_NOW' }, '*');
+        } catch {}
+      }
+      setTimeout(() => {
+        if (iframeRef.current) {
+          iframeRef.current.src = iframeRef.current.src;
+        }
+      }, 150);
     }
   };
 

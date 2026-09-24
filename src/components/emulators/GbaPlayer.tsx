@@ -27,12 +27,29 @@ export function GbaPlayer({ game }: GbaPlayerProps) {
       platform: game.platform,
       title: game.title,
     });
+
+    return () => {
+      if (iframeRef.current?.contentWindow) {
+        try {
+          iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_SAVE_NOW' }, '*');
+        } catch {}
+      }
+    };
   }, [game.id, game.platform, game.title]);
 
   const handleRestart = () => {
     if (iframeRef.current) {
+      if (iframeRef.current.contentWindow) {
+        try {
+          iframeRef.current.contentWindow.postMessage({ type: 'DAWGAMING_SAVE_NOW' }, '*');
+        } catch {}
+      }
       setIsLoaded(false);
-      iframeRef.current.src = iframeRef.current.src;
+      setTimeout(() => {
+        if (iframeRef.current) {
+          iframeRef.current.src = iframeRef.current.src;
+        }
+      }, 150);
     }
   };
 
