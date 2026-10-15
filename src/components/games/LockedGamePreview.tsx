@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { CountdownTimer } from './CountdownTimer';
 import { EnergyDrinkChallenge } from './EnergyDrinkChallenge';
+import { RouletteWheel } from './RouletteWheel';
 import {
   Lock,
   ArrowLeft,
@@ -21,6 +22,7 @@ import {
   Play,
   CheckCircle2,
   Cpu,
+  RotateCcw,
 } from 'lucide-react';
 
 interface LockedGamePreviewProps {
@@ -199,13 +201,24 @@ export function LockedGamePreview({ game }: LockedGamePreviewProps) {
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-amber-400" />
           <h2 className="text-xl font-bold text-white tracking-tight">
-            Contador de Cuenta Atrás (25 Días)
+            Contador de Cuenta Atrás Sincronizado (25 Días)
           </h2>
         </div>
         <p className="text-xs sm:text-sm text-[#94a3b8]">
-          Si nadie invita a Carlos a energéticas, el candado se abrirá automáticamente cuando este reloj llegue a cero:
+          Si nadie invita a Carlos a energéticas y la ruleta no lo altera, el candado se abrirá automáticamente cuando este reloj llegue a cero:
         </p>
         <CountdownTimer daysTotal={game.countdownDays || 25} size="lg" />
+      </div>
+
+      {/* Sincronized Roulette Wheel Section */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <RotateCcw className="w-5 h-5 text-cyan-400" />
+          <h2 className="text-xl font-bold text-white tracking-tight">
+            Ruleta de la Suerte: Altera el Tiempo Global
+          </h2>
+        </div>
+        <RouletteWheel />
       </div>
 
       {/* Interactive Energy Drink Challenge */}

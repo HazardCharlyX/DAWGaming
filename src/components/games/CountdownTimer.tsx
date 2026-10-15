@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Clock } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Clock, Radio, Users, Sparkles } from 'lucide-react';
+import { subscribeToGlobalCountdown, GlobalCountdownData } from '@/lib/countdown-sync';
 
 interface CountdownTimerProps {
   daysTotal?: number;
@@ -17,7 +18,7 @@ interface TimeLeft {
   isExpired: boolean;
 }
 
-const STORAGE_KEY = 'dawgaming_hazard_countdown_target_v1';
+const STORAGE_KEY = 'dawgaming_synced_countdown_ts';
 const DEFAULT_DAYS = 25;
 
 export function CountdownTimer({
@@ -32,27 +33,33 @@ export function CountdownTimer({
     seconds: 0,
     isExpired: false,
   });
+  const [globalData, setGlobalData] = useState<GlobalCountdownData | null>(null);
   const [mounted, setMounted] = useState(false);
+  const targetRef = useRef<number>(Date.now() + daysTotal * 24 * 60 * 60 * 1000);
 
   useEffect(() => {
     setMounted(true);
-    let targetTs: number;
-    const stored = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
 
-    if (stored) {
-      targetTs = parseInt(stored, 10);
-      if (isNaN(targetTs)) {
-        targetTs = Date.now() + daysTotal * 24 * 60 * 60 * 1000;
-        localStorage.setItem(STORAGE_KEY, targetTs.toString());
+    // Initial check from local storage cache
+    const cached = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    if (cached) {
+      const parsed = parseInt(cached, 10);
+      if (!isNaN(parsed) && parsed > 0) {
+        targetRef.current = parsed;
       }
-    } else {
-      targetTs = Date.now() + daysTotal * 24 * 60 * 60 * 1000;
-      localStorage.setItem(STORAGE_KEY, targetTs.toString());
     }
+
+    // Subscribe to live Firestore updates
+    const unsubscribe = subscribeToGlobalCountdown((data) => {
+      setGlobalData(data);
+      if (data.targetTimestamp) {
+        targetRef.current = data.targetTimestamp;
+      }
+    });
 
     const calculate = () => {
       const now = Date.now();
-      const diff = Math.max(0, targetTs - now);
+      const diff = Math.max(0, targetRef.current - now);
 
       if (diff <= 0) {
         setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0, isExpired: true });
@@ -69,7 +76,11 @@ export function CountdownTimer({
 
     calculate();
     const interval = setInterval(calculate, 1000);
-    return () => clearInterval(interval);
+
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [daysTotal]);
 
   const pad = (n: number) => n.toString().padStart(2, '0');
@@ -189,6 +200,21 @@ export function CountdownTimer({
             Segundos
           </span>
         </div>
+      </div>
+
+      {/* Real-time synchronization activity bar */}
+      <div className="mt-4 pt-3 border-t border-[#1f2b3e] flex flex-wrap items-center justify-between text-[11px] font-mono text-[#94a3b8] gap-2">
+        <div className="flex items-center gap-1.5 text-emerald-400">
+          <Radio className="w-3.5 h-3.5 animate-pulse" />
+          <span>Sincronizado en tiempo real (Firebase)</span>
+        </div>
+        {globalData?.lastAction && (
+          <div className="flex items-center gap-1 text-slate-300">
+            <span>Última tirada:</span>
+            <strong className="text-white">{globalData.lastUser || 'Gamer'}</strong>
+            <span className="text-amber-400">({globalData.lastAction})</span>
+          </div>
+        )}
       </div>
     </div>
   );
