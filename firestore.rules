@@ -13,6 +13,18 @@ service cloud.firestore {
       allow create: if request.auth != null;
     }
 
+    // Apuestas y tiradas del Casino de 27 números
+    match /casino_bets/{betId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+    }
+
+    // Canjes oficiales de la tienda (Shinies y Respuestas de Carlos) para verificación
+    match /casino_redemptions/{redemptionId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+    }
+
     // Perfil de usuario: lectura y actualización básica si está logueado
     match /users/{userId} {
       allow read, write: if request.auth != null;

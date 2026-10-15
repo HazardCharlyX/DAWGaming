@@ -8,12 +8,14 @@ import { GameGrid } from '@/components/games/GameGrid';
 import { NdsPlayer } from '@/components/emulators/NdsPlayer';
 import { ControlsGuide } from '@/components/emulators/ControlsGuide';
 import { CountdownTimer } from '@/components/games/CountdownTimer';
-import { ArrowLeft, CheckCircle2, Play, Sparkles, Lock, Zap, AlertTriangle, ArrowRight } from 'lucide-react';
+import { CasinoModal } from '@/components/casino/CasinoModal';
+import { ArrowLeft, CheckCircle2, Play, Sparkles, Lock, Zap, AlertTriangle, ArrowRight, Coins } from 'lucide-react';
 
 export default function NdsPlatformPage() {
   const ndsPlatform = PLATFORMS.nds;
   const ndsGames = useMemo(() => getGamesByPlatform('nds'), []);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [showCasino, setShowCasino] = useState(false);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full space-y-8">
@@ -53,7 +55,15 @@ export default function NdsPlatformPage() {
           </p>
         </div>
 
-        <div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setShowCasino(true)}
+            className="px-4 py-2.5 text-xs font-bold text-black bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 border border-amber-300 flex items-center gap-2 cursor-pointer rounded-lg shadow-lg shadow-amber-950/40 transition-all hover:scale-105"
+          >
+            <Coins className="w-4 h-4 text-black" />
+            <span>Casino DAW (Ruleta & Shinies)</span>
+          </button>
+
           <button
             onClick={() => setShowPlayer(!showPlayer)}
             className="btn-hardware px-4 py-2.5 text-xs font-bold text-white bg-emerald-600 border-emerald-500 hover:bg-emerald-500 flex items-center gap-2 cursor-pointer rounded-lg shadow-lg shadow-emerald-950/40"
@@ -157,6 +167,8 @@ export default function NdsPlatformPage() {
           />
         )}
       </div>
+
+      <CasinoModal isOpen={showCasino} onClose={() => setShowCasino(false)} />
     </div>
   );
 }
