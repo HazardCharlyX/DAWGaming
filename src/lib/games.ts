@@ -1,11 +1,13 @@
 import { Game, PlatformId, RomManifestEntry } from '@/lib/types';
 import romsManifest from '@/data/roms-manifest.json';
 import { BUILTIN_WEB_GAMES } from '@/data/built-in-games';
+import { LOCKED_NDS_GAMES } from '@/data/locked-games';
 
 // Helper to convert RomManifestEntry to Game
 function manifestEntryToGame(entry: RomManifestEntry): Game {
-  const isPlayable = entry.platform === 'gba' || entry.platform === 'nds';
-  const status = isPlayable ? 'ready' : 'in-development';
+  const isLocked = entry.isLocked ?? entry.status === 'locked';
+  const isPlayable = isLocked ? false : entry.platform === 'gba' || entry.platform === 'nds';
+  const status = isLocked ? 'locked' : isPlayable ? 'ready' : 'in-development';
 
   return {
     id: entry.id,
@@ -25,12 +27,24 @@ function manifestEntryToGame(entry: RomManifestEntry): Game {
     isPlayable,
     status,
     controlsHint: entry.controlsHint,
+    isLocked,
+    originalBase: entry.originalBase,
+    lockReason: entry.lockReason,
+    unlockRequirement: entry.unlockRequirement,
+    countdownDays: entry.countdownDays,
+    previewNotice: entry.previewNotice,
   };
 }
 
 export function getAllGames(): Game[] {
   const romGames = (romsManifest as RomManifestEntry[]).map(manifestEntryToGame);
-  return [...BUILTIN_WEB_GAMES, ...romGames];
+  
+  // Combine built-in web games, rom games, and locked games
+  const allKnown = [...BUILTIN_WEB_GAMES, ...romGames];
+  const knownIds = new Set(allKnown.map((g) => g.id));
+  const additionalLocked = LOCKED_NDS_GAMES.filter((g) => !knownIds.has(g.id));
+
+  return [...allKnown, ...additionalLocked];
 }
 
 export function getGameById(id: string): Game | undefined {

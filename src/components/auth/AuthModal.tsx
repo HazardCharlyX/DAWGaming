@@ -13,6 +13,8 @@ import {
   CheckCircle2,
   UserCheck,
   Shield,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 interface AuthModalProps {
@@ -26,6 +28,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [mounted, setMounted] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -65,7 +68,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
     setLoading(true);
     try {
-      await signInWithUsername(username.trim(), password);
+      await signInWithUsername(username.trim(), password.trim());
       onClose();
     } catch {
       // Handled in AuthContext
@@ -171,13 +174,26 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-9 pr-3 py-2 bg-[#090d14] border border-[#202e43] rounded-lg text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
+                  className="w-full pl-9 pr-9 py-2 bg-[#090d14] border border-[#202e43] rounded-lg text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition-colors font-mono"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors p-1 cursor-pointer"
+                  title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-3.5 h-3.5" />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5" />
+                  )}
+                </button>
               </div>
             </div>
 

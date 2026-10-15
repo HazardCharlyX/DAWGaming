@@ -72,12 +72,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (currentUser) {
-        await syncUserProfile(currentUser);
-      }
       setLoading(false);
+      if (currentUser) {
+        syncUserProfile(currentUser).catch((err) => {
+          console.warn('Background sync user profile error:', err);
+        });
+      }
     });
 
     return () => unsubscribe();
@@ -86,8 +88,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithUsername = async (usernameInput: string, pass: string) => {
     setError(null);
     const clean = usernameInput.trim().toLowerCase();
+    const cleanPass = pass.trim();
 
-    if (!clean || !pass) {
+    if (!clean || !cleanPass) {
       const msg = 'Introduce tu usuario y contraseña';
       setError(msg);
       throw new Error(msg);
@@ -96,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let emailToTry = clean.includes('@') ? clean : `${clean}@dawgaming.app`;
 
     try {
-      const res = await signInWithEmailAndPassword(auth, emailToTry, pass);
+      const res = await signInWithEmailAndPassword(auth, emailToTry, cleanPass);
       if (res.user) {
         syncUserProfile(res.user).catch(() => {});
       }
@@ -109,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const snap = await getDocs(q);
           if (!snap.empty && snap.docs[0].data()?.email && snap.docs[0].data().email !== emailToTry) {
             const alternativeEmail = snap.docs[0].data().email;
-            const res2 = await signInWithEmailAndPassword(auth, alternativeEmail, pass);
+            const res2 = await signInWithEmailAndPassword(auth, alternativeEmail, cleanPass);
             if (res2.user) {
               syncUserProfile(res2.user).catch(() => {});
               return;
@@ -128,6 +131,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         msg = 'El usuario no existe. Contacta con Carlos J Samper para registrarte.';
       } else if (err.code === 'auth/too-many-requests') {
         msg = 'Demasiados intentos fallidos. Espera unos momentos.';
+      } else if (err.code === 'auth/unauthorized-domain') {
+        msg = 'Dominio web no autorizado en Firebase. Añádelo en Firebase Console > Authentication > Settings > Authorized domains.';
+      } else if (err.code === 'auth/network-request-failed') {
+        msg = 'Error de conexión con Firebase. Revisa tu conexión a internet o cortafuegos.';
+      } else if (err.message) {
+        msg = err.message;
       }
       setError(msg);
       throw new Error(msg);

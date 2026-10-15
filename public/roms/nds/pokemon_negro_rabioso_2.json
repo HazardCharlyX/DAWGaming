@@ -1,0 +1,15 @@
+{
+  "title": "Pokémon Negro Rabioso 2",
+  "genre": "rpg",
+  "year": 2022,
+  "developer": "Drayano / AphexCubed",
+  "description": "La experiencia definitiva en Teselia 2 basada en Pokémon Blaze Black 2 Redux. Nuevas áreas desbloqueadas, modo desafío profesional, entrenadores con estrategias de torneo, distribución completa de la Pokédex Nacional y mejoras drásticas de QoL.",
+  "featured": true,
+  "isLocked": true,
+  "originalBase": "Pokémon Blaze Black 2",
+  "lockReason": "Acceso Bloqueado",
+  "unlockRequirement": "Para desbloquear debéis invitar a un total de 2 energéticas a Carlos Samper (Hazard) O esperar 25 días",
+  "countdownDays": 25,
+  "previewNotice": "¡Podría estar ya disponible en la web, pero aún no lo está! Próximamente en DAW Gaming.",
+  "cover": "/roms/nds/pokemon_negro_rabioso_2.jpg"
+}

@@ -1,0 +1,15 @@
+{
+  "title": "Pokémon Blanco Infinito",
+  "genre": "rpg",
+  "year": 2021,
+  "developer": "Drayano / Game Freak",
+  "description": "Versión definitiva y de alta dificultad para Nintendo DS basada en el aclamado hackrom Pokémon Volt White de Drayano. Los 649 Pokémon capturables en Teselia, combates competitivos, cambios de tipos, estadísticas rebalanceadas y líderes con equipos de 6.",
+  "featured": true,
+  "isLocked": true,
+  "originalBase": "Pokémon Volt White",
+  "lockReason": "Acceso Bloqueado",
+  "unlockRequirement": "Para desbloquear debéis invitar a un total de 2 energéticas a Carlos Samper (Hazard) O esperar 25 días",
+  "countdownDays": 25,
+  "previewNotice": "¡Podría estar ya disponible en la web, pero aún no lo está! Próximamente en DAW Gaming.",
+  "cover": "/roms/nds/pokemon_blanco_infinito.jpg"
+}

@@ -5,7 +5,8 @@ import { EMULATOR_PLATFORMS } from '@/config/platforms';
 import { GameCard } from '@/components/games/GameCard';
 import { PlatformCard } from '@/components/emulators/PlatformCard';
 import { Button } from '@/components/ui/Button';
-import { Monitor, Gamepad2, ArrowRight } from 'lucide-react';
+import { CountdownTimer } from '@/components/games/CountdownTimer';
+import { Monitor, Gamepad2, ArrowRight, Sparkles, Lock, Zap } from 'lucide-react';
 
 export default function HomePage() {
   const webGames = getGamesByPlatform('web');
@@ -44,12 +45,53 @@ export default function HomePage() {
                 </Button>
               </Link>
 
+              <Link href="/emuladores/nds">
+                <Button size="md" variant="nds" icon={<Gamepad2 className="w-4 h-4" />}>
+                  Abrir Nintendo DS ({ndsGames.length})
+                </Button>
+              </Link>
+
               <Link href="/emuladores">
                 <Button size="md" variant="secondary">
                   Ver Emuladores
                 </Button>
               </Link>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* BANNER ANUNCIO: POKÉMON VOLT WHITE & BLAZE BLACK 2 (BLOQUEADOS)           */}
+      {/* ========================================================================= */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full -mt-4">
+        <div className="relative rounded-2xl bg-gradient-to-r from-[#141d2d] via-[#101724] to-[#0c1017] border border-amber-500/40 p-5 sm:p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-5 overflow-hidden">
+          <div className="space-y-1.5 max-w-2xl">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                PRÓXIMOS LANZAMIENTOS NDS
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold bg-rose-950/70 text-rose-300 border border-rose-800/60 flex items-center gap-1">
+                <Lock className="w-3 h-3" />
+                ACCESO BLOQUEADO
+              </span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-bold text-white">
+              Pokémon Blanco Infinito (Volt White) & Negro Rabioso 2 (Blaze Black 2)
+            </h3>
+            <p className="text-xs sm:text-sm text-[#cbd5e1] font-mono">
+              &ldquo;Estarán disponibles muy pronto. ¡Podrían estar ya disponibles, pero aún no lo están! Para desbloquear: 2 energéticas a Carlos Samper (Hazard) O esperar 25 días.&rdquo;
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 shrink-0">
+            <CountdownTimer size="sm" />
+            <Link href="/emuladores/nds">
+              <Button size="sm" variant="secondary" icon={<ArrowRight className="w-3.5 h-3.5" />}>
+                Ver Previews y Reto
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

@@ -5,6 +5,7 @@ import { getGameBySlugAndPlatform, getGamesByPlatform } from '@/lib/games';
 import { NdsPlayer } from '@/components/emulators/NdsPlayer';
 import { ControlsGuide } from '@/components/emulators/ControlsGuide';
 import { GameCard } from '@/components/games/GameCard';
+import { LockedGamePreview } from '@/components/games/LockedGamePreview';
 import { Badge } from '@/components/ui/Badge';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
 
@@ -31,6 +32,11 @@ export default async function NdsGameRunnerPage({ params }: GamePageProps) {
 
   if (!game) {
     notFound();
+  }
+
+  // If game is locked or has no ROM loaded yet, show the preview page
+  if (game.isLocked || !game.isPlayable) {
+    return <LockedGamePreview game={game} />;
   }
 
   const otherNdsGames = getGamesByPlatform('nds').filter((g) => g.id !== game.id);

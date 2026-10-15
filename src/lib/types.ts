@@ -63,6 +63,13 @@ export interface RomManifestEntry {
   featured: boolean;
   controlsHint?: string;
   createdAt: string;
+  status?: 'ready' | 'in-development' | 'external' | 'locked';
+  isLocked?: boolean;
+  originalBase?: string;
+  lockReason?: string;
+  unlockRequirement?: string;
+  countdownDays?: number;
+  previewNotice?: string;
 }
 
 export interface Game {
@@ -81,8 +88,14 @@ export interface Game {
   featured: boolean;
   isWebGame: boolean;
   isPlayable: boolean;
-  status: 'ready' | 'in-development' | 'external';
+  status: 'ready' | 'in-development' | 'external' | 'locked';
   controlsHint?: string;
+  isLocked?: boolean;
+  originalBase?: string;
+  lockReason?: string;
+  unlockRequirement?: string;
+  countdownDays?: number;
+  previewNotice?: string;
 }
 
 export interface UserLibraryItem {
