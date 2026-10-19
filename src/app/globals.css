@@ -100,3 +100,62 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #394b63;
 }
+
+/* Destruction Mode Animations */
+@keyframes fallApart {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  20% {
+    transform: translateY(-8px) rotate(-3deg);
+  }
+  100% {
+    transform: translateY(120vh) rotate(35deg) scale(0.9);
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+.element-falling {
+  animation: fallApart 1.2s cubic-bezier(0.55, 0.085, 0.68, 0.53) forwards !important;
+  pointer-events: none !important;
+  transform-origin: center center;
+}
+
+.element-damaged {
+  transition: transform 0.15s ease, filter 0.15s ease;
+  filter: contrast(1.15) brightness(1.1);
+}
+
+@keyframes glitchAnim {
+  0% {
+    clip-path: inset(40% 0 61% 0);
+    transform: skew(0.3deg);
+  }
+  20% {
+    clip-path: inset(92% 0 1% 0);
+    transform: skew(1.2deg);
+  }
+  40% {
+    clip-path: inset(10% 0 80% 0);
+    transform: skew(-1.5deg);
+  }
+  60% {
+    clip-path: inset(75% 0 15% 0);
+    transform: skew(0.8deg);
+  }
+  80% {
+    clip-path: inset(25% 0 58% 0);
+    transform: skew(-0.5deg);
+  }
+  100% {
+    clip-path: inset(50% 0 30% 0);
+    transform: skew(0.1deg);
+  }
+}
+
+.apocalypse-glitch-layer {
+  animation: glitchAnim 0.35s infinite linear alternate-reverse;
+}
+

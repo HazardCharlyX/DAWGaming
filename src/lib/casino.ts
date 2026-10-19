@@ -38,25 +38,29 @@ export interface RedemptionRecord {
 }
 
 export interface CasinoBet {
-  type: 'number' | 'color' | 'parity' | 'half';
-  target: number | 'red' | 'black' | 'even' | 'odd' | 'low' | 'high';
+  type: 'number' | 'color' | 'parity' | 'half' | 'dozen' | 'column' | 'racetrack';
+  target: string | number;
   amount: number;
 }
 
-// 27 NUMBERS ROULETTE (0 to 26: 0 is Green, 13 Red, 13 Black)
-export const ROULETTE_NUMBERS = Array.from({ length: 27 }, (_, i) => i); // 0 to 26
+// 37 NUMBERS EUROPEAN ROULETTE (0 to 36: 0 is Green, 18 Red, 18 Black)
+export const ROULETTE_NUMBERS = Array.from({ length: 37 }, (_, i) => i); // 0 to 36
 
-export const RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25];
-export const BLACK_NUMBERS = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26];
+export const RED_NUMBERS = [1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36];
+export const BLACK_NUMBERS = [2, 4, 6, 8, 10, 11, 13, 15, 17, 20, 22, 24, 26, 28, 29, 31, 33, 35];
+
+export const VOISINS_NUMBERS = [22, 18, 29, 7, 28, 12, 35, 3, 26, 0, 32, 15, 19, 4, 21, 2, 25];
+export const TIER_NUMBERS = [27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33];
+export const ORPHELINS_NUMBERS = [1, 20, 14, 31, 9, 17, 34, 6];
 
 export function getNumberColor(num: number): 'green' | 'red' | 'black' {
   if (num === 0) return 'green';
   return RED_NUMBERS.includes(num) ? 'red' : 'black';
 }
 
-// Visual layout sequence on the 27-slot wheel
+// Official European Roulette wheel sequence (as shown in reference image)
 export const WHEEL_SEQUENCE = [
-  0, 26, 3, 22, 15, 8, 19, 10, 1, 24, 13, 6, 17, 2, 25, 4, 21, 14, 7, 20, 9, 12, 5, 18, 11, 16, 23,
+  0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26,
 ];
 
 // POKÉMON SHINIES FOR POKÉMON RENEGADE PLATINUM (Prices between 500 and 15.000)
@@ -238,13 +242,13 @@ export async function executeAndRecordSpin(
 
   for (const bet of bets) {
     if (bet.type === 'number') {
-      if (bet.target === winningNumber) {
-        // Pleno pays 26 to 1! (gives 26 * bet)
-        totalPayout += bet.amount * 26;
+      if (Number(bet.target) === winningNumber) {
+        // Pleno (Straight up) pays 36 to 1 total return (35:1)
+        totalPayout += bet.amount * 36;
       }
     } else if (bet.type === 'color') {
       if (bet.target === winningColor) {
-        // Red / Black pays 2x (1 to 1)
+        // Red / Black pays 2 to 1 (1:1)
         totalPayout += bet.amount * 2;
       }
     } else if (bet.type === 'parity' && winningNumber !== 0) {
@@ -253,9 +257,31 @@ export async function executeAndRecordSpin(
         totalPayout += bet.amount * 2;
       }
     } else if (bet.type === 'half' && winningNumber !== 0) {
-      if ((bet.target === 'low' && winningNumber >= 1 && winningNumber <= 13) ||
-          (bet.target === 'high' && winningNumber >= 14 && winningNumber <= 26)) {
+      if ((bet.target === '1 to 18' && winningNumber >= 1 && winningNumber <= 18) ||
+          (bet.target === '19 to 36' && winningNumber >= 19 && winningNumber <= 36)) {
         totalPayout += bet.amount * 2;
+      }
+    } else if (bet.type === 'dozen' && winningNumber !== 0) {
+      if ((bet.target === '1st 12' && winningNumber >= 1 && winningNumber <= 12) ||
+          (bet.target === '2nd 12' && winningNumber >= 13 && winningNumber <= 24) ||
+          (bet.target === '3rd 12' && winningNumber >= 25 && winningNumber <= 36)) {
+        // Dozen pays 3 to 1 (2:1)
+        totalPayout += bet.amount * 3;
+      }
+    } else if (bet.type === 'column' && winningNumber !== 0) {
+      if ((bet.target === 'col1' && winningNumber % 3 === 1) ||
+          (bet.target === 'col2' && winningNumber % 3 === 2) ||
+          (bet.target === 'col3' && winningNumber % 3 === 0)) {
+        // Column pays 3 to 1 (2:1)
+        totalPayout += bet.amount * 3;
+      }
+    } else if (bet.type === 'racetrack') {
+      if (bet.target === 'voisins' && VOISINS_NUMBERS.includes(winningNumber)) {
+        totalPayout += Math.round(bet.amount * 2.15);
+      } else if (bet.target === 'tier' && TIER_NUMBERS.includes(winningNumber)) {
+        totalPayout += Math.round(bet.amount * 3);
+      } else if (bet.target === 'orphelins' && ORPHELINS_NUMBERS.includes(winningNumber)) {
+        totalPayout += Math.round(bet.amount * 4.5);
       }
     }
   }

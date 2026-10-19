@@ -46,6 +46,7 @@ export const metadata: Metadata = {
 };
 
 import { AuthProvider } from '@/context/AuthContext';
+import { PageDestructionOverlay } from '@/components/destruction/PageDestructionOverlay';
 
 export default function RootLayout({
   children,
@@ -59,6 +60,7 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-[#0b0f15] text-[#f1f5f9] selection:bg-[#5c67f2]/30 selection:text-white">
         <AuthProvider>
+          <PageDestructionOverlay />
           <Navbar />
           <main className="flex-1 flex flex-col">{children}</main>
           <Footer />
